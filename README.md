@@ -67,3 +67,11 @@ The thesis PDF (section 3.7.1) links to those repositories and to the LFPy fork.
 - Supervisors: Gaute T. Einevoll and Espen Hagen
 - [LFPy](https://github.com/LFPy/LFPy) (GPL-3.0). `exp2isyn.mod` is taken from LFPy's examples.
 - Hay E, Hill S, Schürmann F, Markram H, Segev I (2011). *Models of neocortical layer 5b pyramidal cells capturing a wide range of dendritic and perisomatic active properties.* PLoS Comput Biol 7(7): e1002107.
+
+## License
+
+The code in this repository is licensed under the [GNU General Public License v3.0](LICENSE). This includes the thesis scripts, `masters_utils/` and the LFPy patch, consistent with LFPy's own GPL-3.0 license.
+
+Not covered by that license:
+- `thesis.pdf`, © 2021 Steinn Hauser Magnússon, all rights reserved.
+- `detailedHay/L5bPCmodelsEH/`, the Hay et al. (2011) model from ModelDB, which remains under its authors' terms.
