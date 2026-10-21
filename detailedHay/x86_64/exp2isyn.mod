@@ -1,1 +1,0 @@
-../exp2isyn.mod

@@ -1,0 +1,14 @@
+# NEURON compiled mechanisms (rebuild with nrnivmodl)
+x86_64/
+arm64/
+*.o
+*.so
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Simulation output
+*.h5
+*.npy
