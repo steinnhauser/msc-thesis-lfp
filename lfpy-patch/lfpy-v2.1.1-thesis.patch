@@ -1,0 +1,434 @@
+diff --git a/LFPy/cell.py b/LFPy/cell.py
+index bf8d364..7e35405
+--- a/LFPy/cell.py
++++ b/LFPy/cell.py
+@@ -182,8 +182,7 @@ class Cell(object):
+             if not isinstance(morphology, type(neuron.h.SectionList)):
+                 mssg = "%s sections detected! " % sum(1 for sec in neuron.h.allsec()) + \
+                        "Consider setting 'delete_sections=True'"
+-                warn(mssg)
+-
++                # warn(mssg)    # mute this warning...
+         #load morphology
+         try:
+             assert(morphology is not None)
+diff --git a/LFPy/eegmegcalc.py b/LFPy/eegmegcalc.py
+index 4d40624..5876bb4
+--- a/LFPy/eegmegcalc.py
++++ b/LFPy/eegmegcalc.py
+@@ -13,7 +13,7 @@ GNU General Public License for more details.
+ """
+ 
+ 
+-from scipy.special import lpmv
++from scipy.special import eval_legendre, lpmv, legendre
+ import numpy as np
+ from warnings import warn
+ 
+@@ -79,15 +79,15 @@ class OneSphereVolumeConductor(object):
+         try:
+             assert(r.shape[0] == 3)
+             assert(r.ndim == 2)
+-        except AssertionError:
++        except AssertionError as ae:
+             raise AssertionError('r must be a shape (3, n_points) ndarray')
+         try:
+             assert((type(R) is float) or (type(R) is int))
+-        except AssertionError:
++        except AssertionError as ae:
+             raise AssertionError('sphere radius R must be a float value')
+         try:
+             assert((sigma_i > 0) & (sigma_o > 0))
+-        except AssertionError:
++        except AssertionError as ae:
+             raise AssertionError('sigma_i and sigma_o must both be positive values')
+ 
+         self.r = r
+@@ -124,7 +124,7 @@ class OneSphereVolumeConductor(object):
+         try:
+             assert(type(rs) in [int, float, np.float64])
+             assert(abs(rs) < self.R)
+-        except AssertionError:
++        except AssertionError as ae:
+             raise AssertionError('source location rs must be a float value and |rs| must be less than sphere radius R')
+         try:
+             assert((min_distance is None) or (type(min_distance) in [float, int, np.float64]))
+@@ -309,12 +309,6 @@ class FourSphereVolumeConductor(object):
+ 
+     Parameters
+     ----------
+-    r_electrodes : ndarray, dtype=float
+-        Shape (n_contacts, 3) array containing n_contacts electrode locations
+-        in cartesian coordinates in units of (µm).
+-        All ``r_el`` in ``r_electrodes`` must be less than or equal to scalp
+-        radius and larger than the distance between dipole and sphere
+-        center: ``|rz| < r_el <= radii[3]``.
+     radii : list, dtype=float
+         Len 4 list with the outer radii in units of (µm) for the 4
+         concentric shells in the four-sphere model: brain, csf, skull and
+@@ -323,8 +317,12 @@ class FourSphereVolumeConductor(object):
+         Len 4 list with the electrical conductivity in units of (S/m) of
+         the four shells in the four-sphere model: brain, csf, skull and
+         scalp, respectively.
+-    iter_factor : float
+-        iteration-stop factor
++    r_electrodes : ndarray, dtype=float
++        Shape (n_contacts, 3) array containing n_contacts electrode locations
++        in cartesian coordinates in units of (µm).
++        All ``r_el`` in ``r_electrodes`` must be less than or equal to scalp
++        radius and larger than the distance between dipole and sphere
++        center: ``|rz| < r_el <= radii[3]``.
+ 
+     Examples
+     --------
+@@ -335,9 +333,9 @@ class FourSphereVolumeConductor(object):
+     >>> import numpy as np
+     >>> radii = [79000., 80000., 85000., 90000.]
+     >>> sigmas = [0.3, 1.5, 0.015, 0.3]
+-    >>> r_electrodes = np.array([[0., 0., 90000.], [0., 85000., 0.]])
++    >>> r = np.array([[0., 0., 90000.], [0., 85000., 0.]])
+     >>> rz = np.array([0., 0., 78000.])
+-    >>> sphere_model = LFPy.FourSphereVolumeConductor(r_electrodes, radii, sigmas)
++    >>> sphere_model = LFPy.FourSphereVolumeConductor(radii, sigmas, r)
+     >>> # current dipole moment
+     >>> p = np.array([[10., 10., 10.]]*10) # 10 timesteps
+     >>> # compute potential
+@@ -345,11 +343,7 @@ class FourSphereVolumeConductor(object):
+ 
+     """
+ 
+-    def __init__(self,
+-                 r_electrodes,
+-                 radii=[79000., 80000., 85000., 90000.],
+-                 sigmas=[0.3, 1.5, 0.015, 0.3],
+-                 iter_factor=2./99.*1e-6):
++    def __init__(self, radii, sigmas, r_electrodes, iter_factor = 2./99.*1e-6):
+         """Initialize class FourSphereVolumeConductor"""
+         self.r1 = float(radii[0])
+         self.r2 = float(radii[1])
+@@ -741,13 +735,14 @@ class FourSphereVolumeConductor(object):
+         const = 1.
+         coeff_sum = 0.
+         consts = []
+-        while const > self.iteration_stop_factor * 1e-6 * coeff_sum:
++        # while const > self.iteration_stop_factor*coeff_sum:
++        while const > 2./99.*1e-12*coeff_sum:
+             c1n = self._calc_c1n(n)
+             const = n*(c1n * (r / self.r1) ** n + (self._rz / r) ** (n + 1))
+             coeff_sum += const
+             consts.append(const)
+             n += 1
+-        consts = np.insert(consts, 0, 0)  # legendre function starts with P0
++        consts = np.insert(consts, 0, 0) # since the legendre function starts with P0
+         leg_consts = np.polynomial.legendre.Legendre(consts)
+         pot_sum = leg_consts(np.cos(theta))
+         return pot_sum
+@@ -774,7 +769,8 @@ class FourSphereVolumeConductor(object):
+         const = 1.
+         coeff_sum = 0.
+         consts = []
+-        while const > self.iteration_stop_factor * coeff_sum:
++        # while const > self.iteration_stop_factor*coeff_sum:
++        while const > 2./99.*1e-6*coeff_sum:
+             term1 = self._calc_csf_term1(n,r)
+             term2 = self._calc_csf_term2(n,r)
+             const = n*(term1 + term2)
+@@ -808,7 +804,8 @@ class FourSphereVolumeConductor(object):
+         const = 1.
+         coeff_sum = 0.
+         consts = []
+-        while const > self.iteration_stop_factor * coeff_sum:
++        # while const > self.iteration_stop_factor*coeff_sum:
++        while const > 2./99.*1e-6*coeff_sum:
+             c3n = self._calc_c3n(n)
+             d3n = self._calc_d3n(n, c3n)
+             const = n*(c3n * (r / self.r3) ** n + d3n * (self.r3 / r) ** (n + 1))
+@@ -842,7 +839,8 @@ class FourSphereVolumeConductor(object):
+         const = 1.
+         coeff_sum = 0.
+         consts = []
+-        while const > self.iteration_stop_factor * coeff_sum:
++        # while const > self.iteration_stop_factor*coeff_sum:
++        while const > 2./99.*1e-6*coeff_sum:
+             c4n = self._calc_c4n(n)
+             d4n = self._calc_d4n(n, c4n)
+             const = n*(c4n * (r / self.r4) ** n + d4n * (self.r4 / r) ** (n + 1))
+diff --git a/LFPy/lfpcalc.py b/LFPy/lfpcalc.py
+index a02dd64..9590fb6
+--- a/LFPy/lfpcalc.py
++++ b/LFPy/lfpcalc.py
+@@ -247,7 +247,7 @@ def calc_lfp_soma_as_point_anisotropic(cell, x, y, z, sigma, r_limit):
+         somainds = cell.get_idx("soma")
+     except Exception:
+         raise Exception('Call {}.get_idx("soma") failed in method LFPy.lfpcalc.calc_lfp_soma_as_point'.format(cell))
+-    
++
+     dx2_soma = (cell.xmid[somainds] - x)**2
+     dy2_soma = (cell.ymid[somainds] - y)**2
+     dz2_soma = (cell.zmid[somainds] - z)**2
+@@ -300,9 +300,9 @@ def calc_lfp_linesource(cell, x, y, z, sigma, r_limit):
+ 
+     """Calculate electric field potential using the line-source method, all
+     compartments treated as line sources, including soma.
+-    
++
+     Parameters
+-    ----------        
++    ----------
+     cell: obj
+         LFPy.Cell or LFPy.TemplateCell like instance
+     x : float
+@@ -324,7 +324,7 @@ def calc_lfp_linesource(cell, x, y, z, sigma, r_limit):
+     yend = cell.yend
+     zstart = cell.zstart
+     zend = cell.zend
+-    
++
+     deltaS = _deltaS_calc(xstart, xend, ystart, yend, zstart, zend)
+     h = _h_calc(xstart, xend, ystart, yend, zstart, zend, deltaS, x, y, z)
+     r2 = _r2_calc(xend, yend, zend, x, y, z, h)
+@@ -357,7 +357,7 @@ def calc_lfp_soma_as_point(cell, x, y, z, sigma, r_limit):
+ 
+     """Calculate electric field potential using the line-source method,
+     soma is treated as point/sphere source
+-    
++
+     Parameters
+     ----------
+     cell: obj
+@@ -396,7 +396,7 @@ def calc_lfp_soma_as_point(cell, x, y, z, sigma, r_limit):
+     r2 = _r2_calc(xend, yend, zend, x, y, z, h)
+     r_soma = _r_soma_calc(xmid, ymid, zmid, x, y, z)
+     if np.any(r_soma < r_limit[somainds]):
+-        print('Adjusting r-distance to soma segments')
++        # print('Adjusting r-distance to soma segments')    # mute this...
+         r_soma[r_soma < r_limit[somainds]
+                ] = r_limit[somainds][r_soma < r_limit[somainds]]
+ 
+@@ -845,4 +845,4 @@ def calc_lfp_soma_as_point_moi(cell, x, y, z, sigma_T, sigma_S, sigma_G,
+     mapping[somainds] += np.sum(a, axis=0)
+     mapping[somainds] *= 1/(4*np.pi*sigma_T)
+ 
+-    return mapping
+\ No newline at end of file
++    return mapping
+diff --git a/LFPy/network.py b/LFPy/network.py
+index 432ae49..270c4dc
+--- a/LFPy/network.py
++++ b/LFPy/network.py
+@@ -753,7 +753,6 @@ class Network(object):
+         # keep track of synapse positions for this connect
+         # call on this rank such that these can be communicated and stored
+         syn_idx_pos = []
+-
+         # iterate over gids on this RANK and create connections
+         for i, (post_gid, cell) in enumerate(zip(self.populations[post].gids, self.populations[post].cells)):
+             # do NOT iterate over all possible presynaptic neurons
+@@ -807,8 +806,14 @@ class Network(object):
+                     # store also synapse indices allowing for computing LFPs from syn.i
+                     cell.synidx.append(idx)
+ 
+-                    # store gid and xyz-coordinate of synapse positions
+-                    syn_idx_pos.append((cell.gid, cell.xmid[idx], cell.ymid[idx], cell.zmid[idx]))
++                    # store gid and xyz-coordinate of synapse positions.
++                    # add also the synapse weight, delay and pre-synaptic GID.
++                    syn_idx_pos.append(
++                        (
++                            cell.gid, idx, #cell.xmid[idx], cell.ymid[idx], cell.zmid[idx],
++                            weight, delays[i], pre_gid
++                        )
++                    )
+ 
+                 syncount += nidx
+ 
+@@ -829,13 +834,19 @@ class Network(object):
+                 synData = flattenlist(COMM.gather(syn_idx_pos))
+ 
+                 # convert to structured array
+-                dtype = [('gid', 'i8'), ('x', float), ('y', float), ('z', float)]
++                dtype = [('gid', 'i8'), ('idx', 'i8'), # ('x', float), ('y', float), ('z', float),
++                    ('weight', float), ('delay', float), ('pre_gid', 'i8')
++                ]
+                 synDataArray = np.empty((len(synData), ), dtype=dtype)
+-                for i, (gid, x, y, z) in enumerate(synData):
++                for i, (gid, idx, weight, delay, pre_gid) in enumerate(synData):    #x, y, z,
+                     synDataArray[i]['gid'] = gid
+-                    synDataArray[i]['x'] = x
+-                    synDataArray[i]['y'] = y
+-                    synDataArray[i]['z'] = z
++                    synDataArray[i]['idx'] = idx
++                    # synDataArray[i]['x'] = x
++                    # synDataArray[i]['y'] = y
++                    # synDataArray[i]['z'] = z
++                    synDataArray[i]['weight'] = weight
++                    synDataArray[i]['delay'] = delay
++                    synDataArray[i]['pre_gid'] = pre_gid
+                 # Dump to hdf5 file, append to file if entry exists
+                 f = h5py.File(os.path.join(self.OUTPUTPATH,
+                                            'synapse_positions.h5'), 'a')
+diff --git a/LFPy/test/test_eegmegcalc.py b/LFPy/test/test_eegmegcalc.py
+index 0bb07c1..b7f34ec
+--- a/LFPy/test/test_eegmegcalc.py
++++ b/LFPy/test/test_eegmegcalc.py
+@@ -146,9 +146,7 @@ class testFourSphereVolumeConductor(unittest.TestCase):
+         radii = [1., 2., 4., 8.]
+         sigmas = [1., 2., 4., 8.]
+         r_el = np.array([[1., 0., 7.]])
+-        fs = LFPy.FourSphereVolumeConductor(r_electrodes=r_el,
+-                                            radii=radii,
+-                                            sigmas=sigmas)
++        fs = LFPy.FourSphereVolumeConductor(radii, sigmas, r_el)
+ 
+         rz1 = np.array([0., 0., 0.])
+         with np.testing.assert_raises(RuntimeError):
+@@ -169,13 +167,13 @@ class testFourSphereVolumeConductor(unittest.TestCase):
+         sigmas = [1., 2., 4., 8.]
+         r_el = np.array([[0., 0., 1.5]])
+         with np.testing.assert_raises(RuntimeError):
+-            LFPy.FourSphereVolumeConductor(r_el, radii1, sigmas)
++            LFPy.FourSphereVolumeConductor(radii1, sigmas, r_el)
+         with np.testing.assert_raises(RuntimeError):
+-            LFPy.FourSphereVolumeConductor(r_el, radii2, sigmas)
++            LFPy.FourSphereVolumeConductor(radii2, sigmas, r_el)
+         with np.testing.assert_raises(RuntimeError):
+-            LFPy.FourSphereVolumeConductor(r_el, radii3, sigmas)
++            LFPy.FourSphereVolumeConductor(radii3, sigmas, r_el)
+         with np.testing.assert_raises(RuntimeError):
+-            LFPy.FourSphereVolumeConductor(r_el, radii4, sigmas)
++            LFPy.FourSphereVolumeConductor(radii4, sigmas, r_el)
+ 
+     def test_check_params01(self):
+         '''Test that Error is raised if invalid entries in sigmas'''
+@@ -186,13 +184,13 @@ class testFourSphereVolumeConductor(unittest.TestCase):
+         sigmas4 = [1., 2., 4., -8.]
+         r_el = np.array([[0., 0., 1.5]])
+         with np.testing.assert_raises(ValueError):
+-            LFPy.FourSphereVolumeConductor(r_el, radii, sigmas1)
++            LFPy.FourSphereVolumeConductor(radii, sigmas1, r_el)
+         with np.testing.assert_raises(RuntimeError):
+-            LFPy.FourSphereVolumeConductor(r_el, radii, sigmas2)
++            LFPy.FourSphereVolumeConductor(radii, sigmas2, r_el)
+         with np.testing.assert_raises(RuntimeError):
+-            LFPy.FourSphereVolumeConductor(r_el, radii, sigmas3)
++            LFPy.FourSphereVolumeConductor(radii, sigmas3, r_el)
+         with np.testing.assert_raises(RuntimeError):
+-            LFPy.FourSphereVolumeConductor(r_el, radii, sigmas4)
++            LFPy.FourSphereVolumeConductor(radii, sigmas4, r_el)
+ 
+     def test_check_params02(self):
+         '''Test that ValueError is raised if electrode outside head'''
+@@ -201,9 +199,9 @@ class testFourSphereVolumeConductor(unittest.TestCase):
+         r_el1 = np.array([[0., 0., 15.]])
+         r_el2 = np.array([[0., 0., 1.5], [12., 0., 0.]])
+         with np.testing.assert_raises(ValueError):
+-            LFPy.FourSphereVolumeConductor(r_el1, radii, sigmas)
++            LFPy.FourSphereVolumeConductor(radii, sigmas, r_el1)
+         with np.testing.assert_raises(ValueError):
+-            LFPy.FourSphereVolumeConductor(r_el2, radii, sigmas)
++            LFPy.FourSphereVolumeConductor(radii, sigmas, r_el2)
+ 
+     def test_decompose_dipole01(self):
+         '''Test radial and tangential parts of dipole sums to dipole'''
+@@ -232,7 +230,7 @@ class testFourSphereVolumeConductor(unittest.TestCase):
+                            [80000., 2000., 3000.],
+                            [-2000., -80000., -3000.]])
+         el_locs = np.array([[90000., 5000., -5000.]])
+-        fs = LFPy.FourSphereVolumeConductor(el_locs, radii, sigmas)
++        fs = LFPy.FourSphereVolumeConductor(radii, sigmas, el_locs)
+         for p_loc in p_locs:
+             fs._rz_params(p_loc)
+             p_rads, p_tans = fs._decompose_dipole(ps)
+@@ -283,7 +281,7 @@ class testFourSphereVolumeConductor(unittest.TestCase):
+                          [-5.59822325e3, -9.69640709e3, -9.93712111e4],
+                          [99990., 0., 0.001]])
+ 
+-        fs = LFPy.FourSphereVolumeConductor(r_el, radii, sigmas)
++        fs = LFPy.FourSphereVolumeConductor(radii, sigmas, r_el)
+         fs._rz_params(rz)
+ 
+         P1 = np.array([[0., 0., 123456789.],
+@@ -345,7 +343,7 @@ class testFourSphereVolumeConductor(unittest.TestCase):
+                            [0., 15., 0.],
+                            [0., 25., 0.],
+                            [0., 40., 0.]])
+-        four_s = LFPy.FourSphereVolumeConductor(r_elec, radii, sigmas)
++        four_s = LFPy.FourSphereVolumeConductor(radii, sigmas, r_elec)
+         pots_4s = four_s.calc_potential(p, rz)
+         inf_s = LFPy.InfiniteVolumeConductor(0.3)
+         pots_inf = inf_s.get_dipole_potential(p, r_elec - rz)
+@@ -363,10 +361,9 @@ class testFourSphereVolumeConductor(unittest.TestCase):
+         sigmas = fem_sim['sigmas'] # [S/cm]
+         ele_coords = fem_sim['ele_coords'] # [µm]
+ 
+-        fs = LFPy.FourSphereVolumeConductor(ele_coords, radii, sigmas)
++        fs = LFPy.FourSphereVolumeConductor(radii, sigmas, ele_coords)
+         k_mV_to_muV = 1e3
+-        pot_analytical = fs.calc_potential(p, rz).reshape((len(ele_coords),)
+-                                          ).reshape(pot_fem.shape)*k_mV_to_muV
++        pot_analytical = fs.calc_potential(p, rz).reshape((len(ele_coords),)).reshape(pot_fem.shape)*k_mV_to_muV
+         global_error = np.abs(pot_analytical - pot_fem)/(np.max(np.abs(pot_fem)))
+         np.testing.assert_array_less(global_error, 0.01)
+ 
+@@ -398,7 +395,7 @@ class testFourSphereVolumeConductor(unittest.TestCase):
+ 
+ 
+         for i in range(len(p_locs)):
+-            fs = LFPy.FourSphereVolumeConductor(el_locs[i], radii, sigmas)
++            fs = LFPy.FourSphereVolumeConductor(radii, sigmas, el_locs[i])
+             phi = fs.calc_potential(dips[i], p_locs[i])
+             if i == 0:
+                 phi0 = phi[0][0]
+@@ -426,7 +423,7 @@ class testFourSphereVolumeConductor(unittest.TestCase):
+         cell.set_pos(x=0, y=0, z=100)
+         t_point = [1,100,-1]
+ 
+-        MD_4s = LFPy.FourSphereVolumeConductor(electrode_locs, radii, sigmas)
++        MD_4s = LFPy.FourSphereVolumeConductor(radii, sigmas, electrode_locs)
+         p, dipole_locs = cell.get_multi_current_dipole_moments(t_point)
+         Np, Nt, Nd = p.shape
+         Ne = electrode_locs.shape[0]
+@@ -436,7 +433,7 @@ class testFourSphereVolumeConductor(unittest.TestCase):
+         for i in range(Np):
+             dip = p[i]
+             dip_loc = dipole_locs[i]
+-            fs = LFPy.FourSphereVolumeConductor(electrode_locs, radii, sigmas)
++            fs = LFPy.FourSphereVolumeConductor(radii, sigmas, electrode_locs)
+             pot = fs.calc_potential(dip, dip_loc)
+             pot_sum += pot
+ 
+@@ -468,7 +465,7 @@ class testFourSphereVolumeConductor(unittest.TestCase):
+         cell.set_pos(x=0, y=0, z=100)
+         t_point = [1,100,-1]
+ 
+-        MD_4s = LFPy.FourSphereVolumeConductor(electrode_locs, radii, sigmas)
++        MD_4s = LFPy.FourSphereVolumeConductor(radii, sigmas, electrode_locs)
+         p, dipole_locs = cell.get_multi_current_dipole_moments(t_point)
+         Np, Nt, Nd = p.shape
+         Ne = electrode_locs.shape[0]
+@@ -478,7 +475,7 @@ class testFourSphereVolumeConductor(unittest.TestCase):
+         for i in range(Np):
+             dip = p[i]
+             dip_loc = dipole_locs[i]
+-            fs = LFPy.FourSphereVolumeConductor(electrode_locs, radii, sigmas)
++            fs = LFPy.FourSphereVolumeConductor(radii, sigmas, electrode_locs)
+             pot = fs.calc_potential(dip, dip_loc)
+             pot_sum += pot
+ 
+@@ -672,7 +669,7 @@ def make_class_object(rz, r_el):
+     '''Return class object fs'''
+     radii = [79., 80., 85., 90.]
+     sigmas = [0.3, 0.015, 15, 0.3]
+-    fs = LFPy.FourSphereVolumeConductor(r_el, radii, sigmas)
++    fs = LFPy.FourSphereVolumeConductor(radii, sigmas, r_el)
+     fs._rz_params(rz)
+     return fs
+ 
+@@ -682,7 +679,7 @@ def make_simple_class_object():
+     sigmas = [1., 2., 4., 8.]
+     rz1 = np.array([0., 0., .9])
+     r_el = np.array([[0., 0., 1.5]])
+-    fs = LFPy.FourSphereVolumeConductor(r_el, radii, sigmas)
++    fs = LFPy.FourSphereVolumeConductor(radii, sigmas, r_el)
+     fs._rz_params(rz1)
+     return fs
+ 
