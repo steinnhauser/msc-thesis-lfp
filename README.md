@@ -59,8 +59,8 @@ For `detailedHay/`, also run `nrnivmodl` inside `detailedHay/L5bPCmodelsEH/mod/`
 ## History
 
 This repository combines the original `linearLFP` and `linearLFP_utils` repositories, with all their commits kept.
-The thesis PDF (section 3.7.1) links to those repositories and to the LFPy fork. Their contents now live here:
-`linearLFP` at the root, `linearLFP_utils` in `masters_utils/`, and the fork's changes in `lfpy-patch/`.
+The thesis PDF (section 3.7.1) links to those repositories and to an LFPy fork, which are no longer public. Their contents live here:
+`linearLFP` at the root (its old URL redirects here), `linearLFP_utils` in `masters_utils/`, and the fork's changes in `lfpy-patch/`.
 
 ## Credits
 

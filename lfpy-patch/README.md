@@ -5,7 +5,7 @@ The thesis ran on a lightly modified LFPy v2.1.1. Upstream is
 [`49f819f`](https://github.com/LFPy/LFPy/commit/49f819f) (`v2.1.1-5-g49f819f`).
 
 `lfpy-v2.1.1-thesis.patch` contains only the source changes from the original fork at
-`steinnhauser/LFPy`. Generated Cython C files, compiled NEURON mechanisms and file-mode
+`steinnhauser/LFPy`, which has since been retired. Generated Cython C files, compiled NEURON mechanisms and file-mode
 changes are left out.
 
 | File | Change |
